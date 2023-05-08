@@ -90,6 +90,8 @@ int lastButton1State = HIGH; 	// Used to see only EDGE_NEG triggers
 int button2State = HIGH;  	// LOW when CHANGE_CHAR REQUESTED
 int home1State = HIGH;    	// MOTOR 1 HOME_SENSOR
 int home2State = HIGH;    	// MOTOR 2 HOME_SENSOR
+int lastHome1State = home1State;
+int lastHome2State = home2State;
 			  
 //Button debouncing variables
 unsigned long lastButton1Time = 0;
@@ -177,30 +179,32 @@ void loop() {
 	unsigned long currentMillis = millis();
 	if (printClock) {
 		printClock = FALSE; 
-	} 
-	if (currentMillis - lastClockTime > PRINT_CLOCK_DELAY) {
-		if (printClock == FALSE) {
-			printClock = TRUE;  
-		}
-		lastClockTime = currentMillis;			
+		lastClockTime = currentMillis;
+	}
+	else if (currentMillis - lastClockTime > PRINT_CLOCK_DELAY) {
+		printClock = TRUE;  
 	}
 	
 	// INPUT BRIDGE: update buttons state, keyboard state and so on...
 	// Sensors readings
+	lastHome1State = home1State;
+	lastHome2State = home2State;
+
 	home1State = digitalRead(HOME1_PIN);
 	home2State = digitalRead(HOME2_PIN);
+
 	// Buttons readings
 	lastButton1State = button1State;
 	button1State = digitalRead(BUTTON1_PIN);
 	button2State = digitalRead(BUTTON2_PIN);
 
-	if (printClock) {  
+	if (printClock) {  /******************************************* Da cambiare ****************************************************/ 
 		lastKeyValue = keyValue;
 		keyValue = convertKey(KEY_PIN);
 	}
 
 	// Key_Buffer Update
-	// *** Esplorare il problema delle doppie ***
+	// ************************************************* Esplorare il problema delle doppie **************************************************
 	if ((lastKeyValue != keyValue) && (keyBufferLength < BUFFER_SIZE) && (keyValue != 0)) {
 		keyBuffer[keyBufferLength] = keyValue;
 		keyBufferLength++;
@@ -211,8 +215,27 @@ void loop() {
 	//	if (Falling 2) allora aggiorna init home pos 2
 	//	if (Raising 1) allora aggiorna fin home pos 1
 	//	if (Raising 2) allora aggiorna fin home pos 2
-initHomPos1	
+	
+	if (lastHome1State != home1State) {
+		if (home1State == HIGH) { 	// home1State = HIGH 	lastHome1State = LOW	// Rising phase 1
+			finHome1Pos = stepper1.currentPosition();
+		} else {			// home1State = LOW 	lastHome1State = HIGH	// Falling phase 1
+			initHome1Pos = stepper1.currentPosition();	
+		}
+	}
+
+	if (lastHome2State != home2State) {
+		if (home2State == HIGH) {	// home2State = HIGH 	lastHome2State = LOW	// Rising phase 2
+			finHome2Pos = stepper2.currentPosition();	
+		} else {			// home2State = LOW	lastHome2State = HIGH	// Falling phase 2
+			initHome2Pos = stepper2.currentPosition();
+		}
+	}
+
+	/************************************ FARE CALCOLO DELL'HOMING DINAMICO PRIMA DI MUOVERE IL MOTOTRE  ****************************/
+
 	// DEBUGGING
+	
 #ifdef DEBUG
 	if (printClock) {
 		Serial.print(keyValue);
@@ -629,24 +652,16 @@ int debounceKey(char buttonPin, int buttonState) {
 	unsigned long currentMillis = millis();
 
 	if (reading != buttonState) {
-		
 		if (updateButtonState){
-
 			if (currentMillis - lastButtonTime >= BTN_DEBOUNCE_DELAY) {
-	
 				buttonState = reading;
 				updateButtonState = FALSE;
-	
 			}
-
 		}
 		else {
-
 			lastButtonTime = currentMillis; 
 			updateButtonState = TRUE;
-
 		}
-
 	}
 
 	return buttonState;
