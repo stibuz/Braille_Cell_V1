@@ -201,6 +201,11 @@ void loop() {
 	}
 
 	// ERROR HANDLER: no home trigger after 1 full revolution and some (check current pos) or if 2 buttons pressed together
+	if (FALLING phase1) allora aggiorna initHomPos1
+	if (Falling 2) allora aggiorna init home pos 2
+	if (Raising 1) allora aggiorna fin home pos 1
+	if (Raising 2) allora aggiorna fin home pos 2
+	
 	// DEBUGGING
 	if (printClock) {
 		Serial.print(keyValue);
@@ -238,7 +243,7 @@ void loop() {
 			if ((button1State == LOW) && (lastButton1State == HIGH)) {
 				stepper2.stop();
 				stepper2.setCurrentPosition(0);
-				mainState = UPDATE_HOME_POS;      
+				mainState = UPDATE_HOME_POS; // Qua si può andare direttamente a READY)       
 			}
 			else if (stepper2.distanceToGo() == 0) {
 				stepper2.move(2200);
@@ -246,7 +251,9 @@ void loop() {
 			}
 			break;
 	
-		case UPDATE_HOME_POS:
+		case UPDATE_HOME_POS: //(QUA CI PASSIAMO DOPO AVER FATTO L'UPDATE CELL)
+			AGGIORNARE POSIZIONE VIRTUALE DEI MOTORI:
+			considerando che non saremo in zero, ma nelle ultime target positions utilizzate. 
 			mainState = READY;
 			break;
 	
@@ -635,6 +642,26 @@ void debounceKey(char buttonPin, int* buttonState, unsigned long* lastButtonTime
 		 * }
 		 */
 	}
+}
+
+
+void debounceKey(char buttonPin, int* buttonState, unsigned long* lastButtonTime) {
+	unsigned long currentMillis = millis();
+
+	if (reading != *buttonState) {
+		
+		if (currentMillis - *lastButtonTime > BTN_DEBOUNCE_DELAY) {
+			int reading = digitalRead(buttonPin);
+			*buttonState = reading;
+		}
+		
+	}
+	else {
+		
+		*lastButtonTime = currentMillis;
+	
+	}
+
 }
 
 /*
