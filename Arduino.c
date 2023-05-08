@@ -3,6 +3,10 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+// ######################################################################
+#define DEBUG
+// ######################################################################
+
 #define FALSE 			false
 #define TRUE 			true
 
@@ -134,8 +138,10 @@ void setup() {
 	pinMode(BUTTON2_PIN, INPUT_PULLUP);
 	pinMode(HOME1_PIN, INPUT_PULLUP);
 	pinMode(HOME2_PIN, INPUT_PULLUP);
+#ifdef DEBUG
 	// Setup Serial COM
 	Serial.begin(9600);
+#endif
 	// SETUP LCD
 	lcd.init();
 	lcd.backlight();
@@ -201,12 +207,13 @@ void loop() {
 	}
 
 	// ERROR HANDLER: no home trigger after 1 full revolution and some (check current pos) or if 2 buttons pressed together
-	if (FALLING phase1) allora aggiorna initHomPos1
-	if (Falling 2) allora aggiorna init home pos 2
-	if (Raising 1) allora aggiorna fin home pos 1
-	if (Raising 2) allora aggiorna fin home pos 2
-	
+	//	if (FALLING phase1) allora aggiorna initHomPos1
+	//	if (Falling 2) allora aggiorna init home pos 2
+	//	if (Raising 1) allora aggiorna fin home pos 1
+	//	if (Raising 2) allora aggiorna fin home pos 2
+initHomPos1	
 	// DEBUGGING
+#ifdef DEBUG
 	if (printClock) {
 		Serial.print(keyValue);
 		Serial.print("..");
@@ -221,7 +228,7 @@ void loop() {
 		Serial.print(stepper2.distanceToGo());
 		Serial.print("\n");
 	}
-
+#endif
 	// MAIN STATE MACHINE:
 	switch (mainState) {
 	
@@ -603,26 +610,47 @@ char convertKey2(int buttonPin) {
 	else if (resistor < 107080) value = 'U';
 	else if (resistor < 111540) value = 'W';
 	else if (resistor < 116000) value = 'Y';
-i	return value;
+	return value;
 }
 
-void debounceButton(int buttonPin, int* buttonState, unsigned long* lastButtonTime) {
+/* 
+ * Soluzione proposta da bob:
+ * 	
+ * Quando il programma nota una differenza tra reading e buttonState, se updateButtonState è FALSE, lo setta a TRUE e fa partire il timer.
+ * Se il programma richiama questa funzione che updateButtonState è TRUE ma non è passato abbastanza tempo, esce senza eseguire l'update.
+ * Se il programma richiama questa funzione che updateButtonState è TRUE ed è passato abbastanza tempo, esegue l'update e setta a FALSE updateButtonState.
+ */
+bool updateButtonState = FALSE;
+unsigned long lastButtonTime;
+
+int debounceKey(char buttonPin, int buttonState) {
+
+	int reading = digitalRead(buttonPin);
 	unsigned long currentMillis = millis();
 
-	if (currentMillis - *lastButtonTime > BTN_DEBOUNCE_DELAY) {
-		int reading = digitalRead(buttonPin);
+	if (reading != buttonState) {
+		
+		if (updateButtonState){
+
+			if (currentMillis - lastButtonTime >= BTN_DEBOUNCE_DELAY) {
 	
-		if (reading != *buttonState) {
-			*lastButtonTime = currentMillis;
+				buttonState = reading;
+				updateButtonState = FALSE;
+	
+			}
+
+		}
+		else {
+
+			lastButtonTime = currentMillis; 
+			updateButtonState = TRUE;
+
 		}
 
-		// inutile: la condizione di questo else è !(reading != *buttonState), quindi reading == buttonState
-		/*
-		 * else {
-		 * 	*buttonState = reading;
-		 * }
-		 */
 	}
+
+	return buttonState;
+
 }
 
 void debounceKey(char buttonPin, int* buttonState, unsigned long* lastButtonTime) {
@@ -644,25 +672,6 @@ void debounceKey(char buttonPin, int* buttonState, unsigned long* lastButtonTime
 	}
 }
 
-
-void debounceKey(char buttonPin, int* buttonState, unsigned long* lastButtonTime) {
-	unsigned long currentMillis = millis();
-
-	if (reading != *buttonState) {
-		
-		if (currentMillis - *lastButtonTime > BTN_DEBOUNCE_DELAY) {
-			int reading = digitalRead(buttonPin);
-			*buttonState = reading;
-		}
-		
-	}
-	else {
-		
-		*lastButtonTime = currentMillis;
-	
-	}
-
-}
 
 /*
 
