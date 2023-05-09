@@ -7,92 +7,89 @@
 #define DEBUG
 // ######################################################################
 
-#define FALSE 			false
-#define TRUE 			true
+#define FALSE false
+#define TRUE true
 
 // TARGET POSITIONS mapped in steps each sectors
-#define TARGET_STEP 		255
-#define TARGET_POS_0 		0
-#define TARGET_POS_1 		TARGET_POS_0 + TARGET_STEP
-#define TARGET_POS_2 		TARGET_POS_1 + TARGET_STEP
-#define TARGET_POS_3		TARGET_POS_2 + TARGET_STEP
-#define TARGET_POS_4 		TARGET_POS_3 + TARGET_STEP
-#define TARGET_POS_5 		TARGET_POS_4 + TARGET_STEP
-#define TARGET_POS_6 		TARGET_POS_5 + TARGET_STEP
-#define TARGET_POS_7 		TARGET_POS_6 + TARGET_STEP
+#define TARGET_POS_0 0
+#define TARGET_POS_1 255
+#define TARGET_POS_2 510
+#define TARGET_POS_3 765
+#define TARGET_POS_4 1020
+#define TARGET_POS_5 1275
+#define TARGET_POS_6 1530
+#define TARGET_POS_7 1785
 
 // PERIPHERALS WIRING
 // LCD 1602 Freenove
-#define LCD_ADDRESS 		0x3F
-#define LCD_COLUMNS 		16
-#define LCD_ROWS 		2
+#define LCD_ADDRESS 0x3F
+#define LCD_COLUMNS 16
+#define LCD_ROWS 2
 
 // BUTTONS
-#define BUTTON1_PIN 		13  //Forces Homing Execution
-#define BUTTON2_PIN 		12  //Starts Change Character procedure
-#define HOME1_PIN 		2
-#define HOME2_PIN 		3
+#define BUTTON1_PIN 13  //Forces Homing Execution
+#define BUTTON2_PIN 12  //Starts Change Character procedure
+#define HOME1_PIN 2
+#define HOME2_PIN 3
 
 // KEYBOARD PIN and CONF
-#define KEY_PIN 		A5
-#define R_REF 			10000
-#define V_REF 			5
-#define ADC_RES 		1024
-#define BUFFER_SIZE 		8
+#define KEY_PIN A5
+#define R_REF 10000
+#define V_REF 5
+#define ADC_RES 1024
+#define BUFFER_SIZE 8
 
 // STEPPER 1
-#define STEPPER1_PIN1 		7
-#define STEPPER1_PIN2 		6
-#define STEPPER1_PIN3 		5
-#define STEPPER1_PIN4 		4
+#define STEPPER1_PIN1 7
+#define STEPPER1_PIN2 6
+#define STEPPER1_PIN3 5
+#define STEPPER1_PIN4 4
 
 // STEPPER 2
-#define STEPPER2_PIN1 		11
-#define STEPPER2_PIN2 		10
-#define STEPPER2_PIN3 		9
-#define STEPPER2_PIN4 		8
+#define STEPPER2_PIN1 11
+#define STEPPER2_PIN2 10
+#define STEPPER2_PIN3 9
+#define STEPPER2_PIN4 8
 
 // CONFIG PARAMETER
 // Debouncing times
-#define BTN_DEBOUNCE_DELAY 	50
-#define SNS_DEBOUNCE_DELAY 	20
-#define PRINT_CLOCK_DELAY 	100
+#define BTN_DEBOUNCE_DELAY 50
+#define SNS_DEBOUNCE_DELAY 2
+#define PRINT_CLOCK_DELAY 1500
+#define READ_CLOCK_DELAY 40
 
 // Motors
-#define MAX_SPEED 		3000
-#define ACCELERATION 		1000
-#define SPEED			500
-#define STEP_PER_ROTATION 	2038
+#define MAX_SPEED 3000
+#define ACCELERATION 5000
+#define SPEED 2000
+#define STEP_PER_ROTATION 2038
 
 // Define the states of the state machines as an enumeration
 enum MainState {
-	START_HOME,
-	CONTINUE_HOMING,
-	UPDATE_HOME_POS,
-	READY,
-	UPDATE_CELL,
-	UPDATE_COMPLETE
+  START_HOME,
+  CONTINUE_HOMING,
+  UPDATE_HOME_POS,
+  READY,
+  UPDATE_CELL,
+  UPDATE_COMPLETE
 };
 
 enum UpdateState {
-	CHECK_HOME_NEEDS,
-	EXEC_HOME,
-	CONTINUE_HOME,
-	UPDATE_HOME,
-	SET_TARGETS,
-	CHECK_IF_DONE
+  SET_TARGETS,
+  CHECK_IF_DONE
 };
 
 // DEFINE GLOBAL VARIABLES
 // Button State variables
-int button1State = HIGH;  	// LOW when HOMING REQUESTED
-int lastButton1State = HIGH; 	// Used to see only EDGE_NEG triggers
-int button2State = HIGH;  	// LOW when CHANGE_CHAR REQUESTED
-int home1State = HIGH;    	// MOTOR 1 HOME_SENSOR
-int home2State = HIGH;    	// MOTOR 2 HOME_SENSOR
+int button1State = HIGH;      // LOW when HOMING REQUESTED
+int lastButton1State = HIGH;  // Used to see only EDGE triggers
+int button2State = HIGH;      // LOW when CHANGE_CHAR REQUESTED
+int lastButton2State = HIGH;  // Used to see only EDGE triggers
+int home1State = HIGH;        // MOTOR 1 HOME_SENSOR
+int home2State = HIGH;        // MOTOR 2 HOME_SENSOR
 int lastHome1State = home1State;
 int lastHome2State = home2State;
-			  
+
 //Button debouncing variables
 unsigned long lastButton1Time = 0;
 unsigned long lastButton2Time = 0;
@@ -100,11 +97,13 @@ unsigned long lastHome1Time = 0;
 unsigned long lastHome2Time = 0;
 unsigned long lastKeyTime = 0;
 
-//Clock variables for prints and keyboard readings
+//Clock variables for prints and keyboard/buttons readings
 bool printClock = FALSE;
-unsigned long lastClockTime = 0;
+bool readClock = FALSE;
+unsigned long lastReadClockTime = 0;
+unsigned long lastPrintClockTime = 0;
 
-//Motor homing states variables
+//Dynamic homing states variables
 int initHome1Pos = 0;
 int initHome2Pos = 0;
 int finHome1Pos = 0;
@@ -113,6 +112,11 @@ bool initHome1Upd = FALSE;
 bool initHome2Upd = FALSE;
 bool finHome1Upd = FALSE;
 bool finHome2Upd = FALSE;
+
+bool initHome1SyncFlag = FALSE;
+bool initHome2SyncFlag = FALSE;
+bool finHome1SyncFlag = FALSE;
+bool finHome2SyncFlag = FALSE;
 
 //Character buffer variables
 //char keyBuffer[BUFFER_SIZE]= {0};
@@ -135,428 +139,394 @@ int target2Pos = 0;
 
 // SETUP FUNCTION ////////////////////////////////////////////////////////////
 void setup() {
-	// SETUP PINS (Buttons, KeyAnalog..)
-	pinMode(BUTTON1_PIN, INPUT_PULLUP);
-	pinMode(BUTTON2_PIN, INPUT_PULLUP);
-	pinMode(HOME1_PIN, INPUT_PULLUP);
-	pinMode(HOME2_PIN, INPUT_PULLUP);
+  // SETUP PINS (Buttons, KeyAnalog..)
+  pinMode(BUTTON1_PIN, INPUT_PULLUP);
+  pinMode(BUTTON2_PIN, INPUT_PULLUP);
+  pinMode(HOME1_PIN, INPUT_PULLUP);
+  pinMode(HOME2_PIN, INPUT_PULLUP);
 #ifdef DEBUG
-	// Setup Serial COM
-	Serial.begin(9600);
+  // Setup Serial COM
+  Serial.begin(9600);
 #endif
-	// SETUP LCD
-	lcd.init();
-	lcd.backlight();
-	lcd.setCursor(0, 0);  // (COLUMN, ROW)
-	lcd.print("Buffer: ");//restart from (8, 0)
-	lcd.setCursor(0, 1);
-	lcd.print("State: ");	//restart from (7, 1)
-	
-	// SETUP MOTORS
-	stepper1.setMaxSpeed(MAX_SPEED);
-	stepper1.setAcceleration(ACCELERATION);
-	stepper1.setSpeed(SPEED);
+  // SETUP LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);    // (COLUMN, ROW)
+  lcd.print("Buffer: ");  //restart from (8, 0)
+  lcd.setCursor(0, 1);
+  lcd.print("State:");  //restart from (6, 1)
 
-	stepper2.setMaxSpeed(MAX_SPEED);
-	stepper2.setAcceleration(ACCELERATION);
-	stepper2.setSpeed(SPEED);
-	
-	// START FIRST HOMING
-	stepper1.move(2200);
-	stepper1.setSpeed(200);
-	//stepper2.move(100);
-	keyBuffer[0] = 'Q';
-	keyBuffer[1] = 'B';
-	keyBuffer[2] = 'B';
-	keyBufferLength = 3;
-	//stepper1.setMinPulseWidth(50);
-	//stepper2.setMinPulseWidth(50);
+  // SETUP MOTORS
+  stepper1.setMaxSpeed(MAX_SPEED);
+  stepper1.setAcceleration(ACCELERATION);
+  stepper1.setSpeed(SPEED);
+
+  stepper2.setMaxSpeed(MAX_SPEED);
+  stepper2.setAcceleration(ACCELERATION);
+  stepper2.setSpeed(SPEED);
+
+  keyBuffer[0] = 'F';
+  keyBuffer[1] = 'I';
+  keyBuffer[2] = 'R';
+  keyBuffer[3] = 'E';
+  keyBuffer[4] = 'F';
+  keyBuffer[5] = 'L';
+  keyBuffer[6] = 'Y';
+  keyBufferLength = 7;
+  //stepper1.setMinPulseWidth(50);
+  //stepper2.setMinPulseWidth(50);
 }
 
 // LOOP FUNCTION /////////////////////////////////////////////////////////////
 void loop() {
-	// Clock for delayed routines
-	unsigned long currentMillis = millis();
-	if (printClock) {
-		printClock = FALSE; 
-		lastClockTime = currentMillis;
-	}
-	else if (currentMillis - lastClockTime > PRINT_CLOCK_DELAY) {
-		printClock = TRUE;  
-	}
-	
-	// INPUT BRIDGE: update buttons state, keyboard state and so on...
-	// Sensors readings
-	lastHome1State = home1State;
-	lastHome2State = home2State;
+  // Clock for delayed routines
+  computeClock(&printClock, &lastPrintClockTime, PRINT_CLOCK_DELAY);
+  // INPUT BRIDGE: update buttons state, keyboard state and so on...
+  // Sensors readings
+  lastHome1State = home1State;
+  lastHome2State = home2State;
+  //debounceButton(&home1State, HOME1_PIN, &lastHome1Time, SNS_DEBOUNCE_DELAY);
+  //debounceButton(&home2State, HOME2_PIN, &lastHome2Time, SNS_DEBOUNCE_DELAY);
+  home1State = digitalRead(HOME1_PIN);
+  home2State = digitalRead(HOME2_PIN);
+  // Buttons readings
+  lastButton1State = button1State;
+  lastButton2State = button1State;
+  //debounceButton(&button1State, BUTTON1_PIN, &lastButton1Time, BTN_DEBOUNCE_DELAY);
+  //debounceButton(&button2State, BUTTON2_PIN, &lastButton2Time, BTN_DEBOUNCE_DELAY);
+  button1State = digitalRead(BUTTON1_PIN);
+  button2State = digitalRead(BUTTON2_PIN);
 
-	home1State = digitalRead(HOME1_PIN);
-	home2State = digitalRead(HOME2_PIN);
+  lastKeyValue = keyValue;
+  //debounceKey(&keyValue, convertKey(KEY_PIN), &lastKeyTime, READ_CLOCK_DELAY);
+  keyValue = convertKey(KEY_PIN);
+  // Key_Buffer Update
+  // ************************************************* Esplorare il problema delle doppie **************************************************
+  if ((lastKeyValue != keyValue) && (keyBufferLength < BUFFER_SIZE) && (keyValue != 0)) {
+    keyBuffer[keyBufferLength] = keyValue;
+    keyBufferLength++;
+  }
+  // ERROR HANDLER: no home trigger after 1 full revolution and some (check current pos) or if 2 buttons pressed together
+  // DYNAMIC_HOMING HANDLER
+  if (lastHome1State != home1State) {
+    if (home1State == HIGH) {  // home1State = HIGH 	lastHome1State = LOW	// Rising phase 1
+      finHome1Pos = stepper1.currentPosition();
+      finHome1SyncFlag = changeFlag(finHome1SyncFlag);
+    } else {  // home1State = LOW 	lastHome1State = HIGH	// Falling phase 1
+      initHome1Pos = stepper1.currentPosition();
+      initHome1SyncFlag = changeFlag(initHome1SyncFlag);
+    }
+  }
 
-	// Buttons readings
-	lastButton1State = button1State;
-	button1State = digitalRead(BUTTON1_PIN);
-	button2State = digitalRead(BUTTON2_PIN);
+  if (lastHome2State != home2State) {
+    if (home2State == HIGH) {  // home2State = HIGH 	lastHome2State = LOW	// Rising phase 2
+      finHome2Pos = stepper2.currentPosition();
+      finHome2SyncFlag = changeFlag(finHome2SyncFlag);
+    } else {  // home2State = LOW	lastHome2State = HIGH	// Falling phase 2
+      initHome2Pos = stepper2.currentPosition();
+      initHome2SyncFlag = changeFlag(initHome2SyncFlag);
+    }
+  }
 
-	if (printClock) {  /******************************************* Da cambiare ****************************************************/ 
-		lastKeyValue = keyValue;
-		keyValue = convertKey(KEY_PIN);
-	}
+  // MAIN STATE MACHINE:
+  switch (mainState) {
+    case START_HOME:
+      if (home1State == HIGH) {
+        if (stepper1.distanceToGo() == 0) stepper1.move(STEP_PER_ROTATION / 2);
+      } else if (initHome1Upd == FALSE) {
+        initHome1Pos = stepper1.currentPosition();
+        initHome1Upd = TRUE;
+        stepper1.stop();
+      }
+      if (home2State == HIGH) {
+        if (stepper2.distanceToGo() == 0) stepper2.move(STEP_PER_ROTATION / 2);
+      } else if (initHome2Upd == FALSE) {
+        initHome2Pos = stepper2.currentPosition();
+        initHome2Upd = TRUE;
+        stepper2.stop();
+      }
+      if ((home1State == LOW) && (home2State == LOW)) {
+        initHome1Upd = FALSE;
+        initHome2Upd = FALSE;
+        mainState = CONTINUE_HOMING;
+        stepper1.move(STEP_PER_ROTATION / 4);
+        stepper2.move(STEP_PER_ROTATION / 4);
+      }
+      break;
+    case CONTINUE_HOMING:
+      if (home1State == LOW) {
+        if (stepper1.distanceToGo() == 0) stepper1.move(STEP_PER_ROTATION / 4);
+      } else if (finHome1Upd == FALSE) {
+        finHome1Pos = stepper1.currentPosition();
+        finHome1Upd = TRUE;
+        stepper1.stop();
+      }
+      if (home2State == LOW) {
+        if (stepper2.distanceToGo() == 0) stepper2.move(STEP_PER_ROTATION / 4);
+      } else if (finHome2Upd == FALSE) {
+        finHome2Pos = stepper2.currentPosition();
+        finHome2Upd = TRUE;
+        stepper2.stop();
+      }
+      if ((home1State == HIGH) && (home2State == HIGH)) {
+        finHome1Upd = FALSE;
+        finHome2Upd = FALSE;
+        stepper1.setCurrentPosition(finHome1Pos - initHome1Pos);
+        stepper2.setCurrentPosition(finHome2Pos - initHome2Pos);
+        mainState = READY;
+      }
+      break;
+    case UPDATE_HOME_POS:
+      /* CODICE CALCOLO NUOVO VALORE ATTUALE POSIZIONE MOTORI */
+      if (initHome1SyncFlag == finHome1SyncFlag) {
+        stepper1.setCurrentPosition((((finHome1Pos + initHome1Pos) / 2) % STEP_PER_ROTATION) + target1Pos);
+      }
+      if (initHome2SyncFlag == finHome2SyncFlag) {
+        stepper2.setCurrentPosition((((finHome2Pos + initHome2Pos) / 2) % STEP_PER_ROTATION) + target1Pos);
+      }
+      mainState = READY;
+      break;
 
-	// Key_Buffer Update
-	// ************************************************* Esplorare il problema delle doppie **************************************************
-	if ((lastKeyValue != keyValue) && (keyBufferLength < BUFFER_SIZE) && (keyValue != 0)) {
-		keyBuffer[keyBufferLength] = keyValue;
-		keyBufferLength++;
-	}
+    case READY:
+      if ((button2State == LOW) && (keyBufferLength > 0)) {
+        setTargets(&target1Pos, &target2Pos, keyBuffer[0]);
+        mainState = UPDATE_CELL;
+      }
+      if ((button1State == LOW) && (lastButton1State == HIGH)) {
+        mainState = START_HOME;
+      }
+      break;
 
-	// ERROR HANDLER: no home trigger after 1 full revolution and some (check current pos) or if 2 buttons pressed together
-	//	if (FALLING phase1) allora aggiorna initHomPos1
-	//	if (Falling 2) allora aggiorna init home pos 2
-	//	if (Raising 1) allora aggiorna fin home pos 1
-	//	if (Raising 2) allora aggiorna fin home pos 2
-	
-	if (lastHome1State != home1State) {
-		if (home1State == HIGH) { 	// home1State = HIGH 	lastHome1State = LOW	// Rising phase 1
-			finHome1Pos = stepper1.currentPosition();
-		} else {			// home1State = LOW 	lastHome1State = HIGH	// Falling phase 1
-			initHome1Pos = stepper1.currentPosition();	
-		}
-	}
+    // START of UPDATE_CELL STATE-MACHINE
+    case UPDATE_CELL:
+      switch (updateState) {
+        case SET_TARGETS:
+          int stepper1CurrentPosition = stepper1.currentPosition() % STEP_PER_ROTATION;
+          int stepper2CurrentPosition = stepper2.currentPosition() % STEP_PER_ROTATION;
+          //bool flag = FALSE;
+          if (target1Pos < stepper1CurrentPosition) {
+            stepper1.move(STEP_PER_ROTATION - (stepper1CurrentPosition - target1Pos));
+          } else {
+            stepper1.move(target1Pos - (stepper1CurrentPosition));
+          }
 
-	if (lastHome2State != home2State) {
-		if (home2State == HIGH) {	// home2State = HIGH 	lastHome2State = LOW	// Rising phase 2
-			finHome2Pos = stepper2.currentPosition();	
-		} else {			// home2State = LOW	lastHome2State = HIGH	// Falling phase 2
-			initHome2Pos = stepper2.currentPosition();
-		}
-	}
+          if (target2Pos < stepper2CurrentPosition) {
+            stepper2.move(STEP_PER_ROTATION - (stepper2CurrentPosition - target2Pos));
+          } else {
+            stepper2.move(target2Pos - stepper2CurrentPosition);
+          }
+          /*
+          if (flag) {
+            updateState = CHECK_IF_DONE;
+            flag = FALSE;
+          }
+          else flag = TRUE;
+          */
+          break;
 
-	/************************************ FARE CALCOLO DELL'HOMING DINAMICO PRIMA DI MUOVERE IL MOTOTRE  ****************************/
+        case CHECK_IF_DONE:
+          if ((stepper1.distanceToGo() == 0) && ((stepper2.distanceToGo() == 0))) {
+          Serial.print("CAZZOOOOO");
+          updateState = SET_TARGETS;
+          mainState = UPDATE_COMPLETE;
+          }
+          break;
+      }
+      break;
+      // END of UPDATE_CELL STATE-MACHINE
+    case UPDATE_COMPLETE:  // SHIFT BUFFER, REMOVE-1 from keyBufferLength, write the last one to null.
+      for (int i = 0; i < BUFFER_SIZE - 1; i++) {
+        keyBuffer[i] = keyBuffer[i + 1];
+      }
+      keyBuffer[BUFFER_SIZE - 1] = ' ';
+      keyBufferLength--;
+      mainState = UPDATE_HOME_POS;
+      break;
+  }
 
-	// DEBUGGING
-	
+  // OUTPUT BRIDGE-CALLS: call the run function, update lcd, clean buffer and so on..
+  // Run calls for motors
+  stepper1.run();
+  stepper2.run();
+  // LCD print out
+  if (printClock) {
+    lcd.setCursor(8, 0);  // First Line update
+    lcd.print(keyBuffer);
+    lcd.setCursor(7, 1);  // Second Line update
+    switch (mainState) {
+      case START_HOME:
+        lcd.print("START_HOME");
+        break;
+      case CONTINUE_HOMING:
+        lcd.print(" CONT_HOME");
+        break;
+      case UPDATE_HOME_POS:
+        lcd.print("UPD_HM_PS");
+        break;
+      case READY:
+        lcd.print("   READY  ");
+        break;
+      case UPDATE_CELL:
+        lcd.print("UPDAT_CELL");
+        break;
+      case UPDATE_COMPLETE:
+        lcd.print("UPD_COMPLT");
+        break;
+    }
+  }
+// DEBUGGING
 #ifdef DEBUG
-	if (printClock) {
-		Serial.print(keyValue);
-		Serial.print("..");
-		Serial.print(analogRead(KEY_PIN));
-		Serial.print("..");
-		Serial.print(updateState);
-		Serial.print("..");
-		Serial.print(home1State);
-		Serial.print(home2State);
-		Serial.print("..");
-		Serial.print(stepper1.distanceToGo());
-		Serial.print(stepper2.distanceToGo());
-		Serial.print("\n");
-	}
+  if ((button1State == LOW) && (lastButton1State == HIGH)) {
+    mainState = UPDATE_COMPLETE;
+    updateState = SET_TARGETS;
+    Serial.print("CAZZOOOOO");
+  }
+  if (printClock) {
+    Serial.print(keyValue);
+    Serial.print("..");
+    Serial.print(analogRead(KEY_PIN));
+    Serial.print("..");
+    Serial.print(updateState);
+    Serial.print("..");
+    Serial.print(home1State);
+    Serial.print(home2State);
+    Serial.print("..");
+    Serial.print(stepper1.distanceToGo());
+    Serial.print("-");
+    Serial.print(stepper2.distanceToGo());
+    Serial.print("\n");
+  }
 #endif
-	// MAIN STATE MACHINE:
-	switch (mainState) {
-	
-		case START_HOME: 	// OVERRIDE: MANUAL HOME MOTOR 1
-			if ((button1State == LOW) && (lastButton1State == HIGH)) {
-				stepper1.stop();
-				stepper1.setCurrentPosition(0);
-				mainState = CONTINUE_HOMING;
-				stepper2.move(2200);
-				stepper2.setSpeed(200);
-			}
-			else if (stepper1.distanceToGo() == 0) {
-				stepper1.move(2200);
-				stepper1.setSpeed(200);
-			}
-			break;
-
-		case CONTINUE_HOMING: // OVERRIDE: MANUAL HOME MOTOR 2
-			if ((button1State == LOW) && (lastButton1State == HIGH)) {
-				stepper2.stop();
-				stepper2.setCurrentPosition(0);
-				mainState = UPDATE_HOME_POS; // Qua si può andare direttamente a READY)       
-			}
-			else if (stepper2.distanceToGo() == 0) {
-				stepper2.move(2200);
-				stepper2.setSpeed(200);
-			}
-			break;
-	
-		case UPDATE_HOME_POS: //(QUA CI PASSIAMO DOPO AVER FATTO L'UPDATE CELL)
-			AGGIORNARE POSIZIONE VIRTUALE DEI MOTORI:
-			considerando che non saremo in zero, ma nelle ultime target positions utilizzate. 
-			mainState = READY;
-			break;
-	
-		case READY:
-			if ((button2State == LOW) && (keyBufferLength > 0)) {
-				setTargets(&target1Pos, &target2Pos, keyBuffer[0]);
-				mainState = UPDATE_CELL;
-			}
-			if ((button1State == LOW) && (lastButton1State == HIGH)) {
-				stepper1.move(2200);
-				stepper1.setSpeed(200);
-				mainState = START_HOME;
-			}
-			break;
-
-		// START of UPDATE_CELL STATE-MACHINE
-		case UPDATE_CELL:
-			switch (updateState) {
-				/*case CHECK_HOME_NEEDS:
-					if ((stepper1.currentPosition() > target1Pos) || (stepper2.currentPosition() > target2Pos)) {
-						updateState = EXEC_HOME;
-						stepper1.move(1000);
-						stepper2.move(1000);
-					} 
-					else updateState = SET_TARGETS;
-					break;
-	
-				case EXEC_HOME:  // AS START_HOMING
-					if ((home1State == HIGH) && (stepper1.distanceToGo() == 0)) {
-						stepper1.move(1000);
-					} 
-					else if (initHome1Upd == FALSE) {
-						initHome1Pos = stepper1.currentPosition();
-						initHome1Upd = TRUE;
-						stepper1.stop();
-					}
-	
-					if ((home2State == HIGH) && (stepper2.distanceToGo() == 0)) {
-				       		stepper2.move(1000);
-					} 
-					else if (initHome2Upd == FALSE) {
-						initHome2Pos = stepper2.currentPosition();
-						initHome2Upd = TRUE;
-						stepper2.stop();
-					}
-
-					if ((home1State == LOW) && (home2State == LOW)) {
-						initHome1Upd = FALSE;
-						initHome2Upd = FALSE;
-						updateState = CONTINUE_HOME;
-						stepper1.move(500);
-						stepper2.move(500);
-					}
-					break;
-
-				case CONTINUE_HOME:  // AS CONTINUE_HOMING
-					if ((home1State == LOW) && (stepper1.distanceToGo() == 0)) {
-						stepper1.move(500);
-					} 
-					else if (finHome1Upd == FALSE) {
-						finHome1Pos = stepper1.currentPosition();
-						finHome1Upd = TRUE;
-						stepper1.stop();
-					}
-	
-					if ((home2State == LOW) && (stepper2.distanceToGo() == 0)) {
-				       		stepper2.move(500);
-					} 
-					else if (finHome2Upd == FALSE) {
-						finHome2Pos = stepper2.currentPosition();
-						finHome2Upd = TRUE;
-						stepper2.stop();
-					}
-	
-					if ((home1State == HIGH) && (home2State == HIGH)) {
-						finHome1Upd = FALSE;
-						finHome2Upd = FALSE;
-						updateState = UPDATE_HOME;
-					}
-					break;
-				case UPDATE_HOME:  // AS UPDATE_HOME_POS
-					stepper1.setCurrentPosition(finHome1Pos - initHome1Pos);
-					stepper2.setCurrentPosition(finHome2Pos - initHome2Pos);
-					updateState = SET_TARGETS;
-					break;*/
-				case SET_TARGETS:
-					int stepper1CurrentPosition = stepper1.currentPosition() % STEP_PER_ROTATION;
-					int stepper2CurrentPosition = stepper2.currentPosition() % STEP_PER_ROTATION;
-
-					if (target1Pos < stepper1CurrentPosition) {
-						stepper1.move(STEP_PER_ROTATION - (stepper1CurrentPosition - target1Pos)); 
-					}
-					else {
-					       	stepper1.move(target1Pos - (stepper1CurrentPosition));
-					}
-	
-					if (target2Pos < stepper2CurrentPosition) {
-						stepper2.move(STEP_PER_ROTATION - (stepper2CurrentPosition - target2Pos)); 
-					}
-					else { 
-						stepper2.move(target2Pos - stepper2CurrentPosition);
-					}
-	
-					updateState = CHECK_IF_DONE;
-					break;
-	
-				case CHECK_IF_DONE:
-					if ((stepper1.distanceToGo() == 0) && ((stepper2.distanceToGo() == 0))) {
-						updateState = SET_TARGETS;
-						mainState = UPDATE_COMPLETE;
-					}
-					break;
-			}
-			break;
-			// END of UPDATE_CELL STATE-MACHINE
-		case UPDATE_COMPLETE:  // SHIFT BUFFER, REMOVE-1 from keyBufferLength, write the last one to null.
-			for (int i = 0; i < BUFFER_SIZE - 1; i++) {
-				keyBuffer[i] = keyBuffer[i + 1];
-			}
-			keyBuffer[BUFFER_SIZE - 1] = ' ';
-			keyBufferLength--;
-			mainState = READY;
-			break;
-	}
-	
-	// OUTPUT BRIDGE-CALLS: call the run function, update lcd, clean buffer and so on..
-	// Run calls for motors
-	stepper1.run();
-	stepper2.run();
-	// LCD print out
-	if (printClock) {
-		lcd.setCursor(8, 0);  // First Line update
-		lcd.print(keyBuffer);    
-		lcd.setCursor(7, 1);   // Second Line update
-		switch(mainState) {
-			case START_HOME:
-				lcd.print("START_HOM");
-				break;
-			case CONTINUE_HOMING:
-				lcd.print("CONT_HOME");
-				break;
-			case UPDATE_HOME_POS:
-				lcd.print("UPD_HM_PS");
-				break;
-			case READY:
-				lcd.print("  READY  ");
-				break;
-			case UPDATE_CELL:
-				lcd.print("UPDT_CELL");
-				break;
-			case UPDATE_COMPLETE:
-				lcd.print("UPD_CMPLT");
-				break;
-		}
-	}	
-}
+}  //CLOSE loop()
 
 
 // USER FUNCTION //////////////////////////////////////////////////////////
-void setTargets(int* target1, int* target2, char character) {
-	/*
-	 * *target1 = TARGET_POS_0;
-	 * *target2 = TARGET_POS_0;
- 	 */
-	switch (character) {
-		case 'A':
-			*target1 = TARGET_POS_1;
-			*target2 = TARGET_POS_0;
-			break;
-		case 'B':
-			*target1 = TARGET_POS_6;
-			*target2 = TARGET_POS_0;
-			break;
-		case 'C':
-			*target1 = TARGET_POS_1;
-			*target2 = TARGET_POS_4;
-			break;
-		case 'D':
-			*target1 = TARGET_POS_1;
-			*target2 = TARGET_POS_3;
-			break;
-		case 'E':
-			*target1 = TARGET_POS_1;
-			*target2 = TARGET_POS_7;
-			break;
-		case 'F':
-			*target1 = TARGET_POS_6;
-			*target2 = TARGET_POS_4;
-			break;
-		case 'G':
-			*target1 = TARGET_POS_6;
-			*target2 = TARGET_POS_3;
-			break;
-		case 'H':
-			*target1 = TARGET_POS_6;
-			*target2 = TARGET_POS_7;
-			break;
-		case 'I':
-			*target1 = TARGET_POS_7;
-			*target2 = TARGET_POS_4;
-			break;
-		case 'J':
-			*target1 = TARGET_POS_7;
-			*target2 = TARGET_POS_3;
-			break;
-		case 'K':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_0;
-			break;
-		case 'L':
-			*target1 = TARGET_POS_2;
-			*target2 = TARGET_POS_0;
-			break;
-		case 'M':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_4;
-			break;
-		case 'N':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_3;
-			break;
-		case 'O':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_7;
-			break;
-		case 'P':
-			*target1 = TARGET_POS_2;
-			*target2 = TARGET_POS_4;
-			break;	
-		case 'Q':
-			*target1 = TARGET_POS_2;
-			*target2 = TARGET_POS_3;
-			break;
-		case 'R':
-			*target1 = TARGET_POS_2;
-			*target2 = TARGET_POS_7;
-			break;
-		case 'S':
-			*target1 = TARGET_POS_3;
-			*target2 = TARGET_POS_4;
-			break;
-		case 'T':
-			*target1 = TARGET_POS_3;
-			*target2 = TARGET_POS_3;
-			break;
-		case 'U':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_1;
-			break;
-		case 'V':
-			*target1 = TARGET_POS_2;
-			*target2 = TARGET_POS_1;
-			break;
-		case 'W':
-			*target1 = TARGET_POS_7;
-			*target2 = TARGET_POS_2;
-			break;
-		case 'X':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_5;
-			break;
-		case 'Y':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_2;
-			break;
-		case 'Z':
-			*target1 = TARGET_POS_5;
-			*target2 = TARGET_POS_6;
-			break;
-	}
+void computeClock(bool *clockState, unsigned long *lastClockTime, int delay) {
+  unsigned long currentMillis = millis();
+  if (*clockState == TRUE) {
+    *clockState = FALSE;
+    *lastClockTime = currentMillis;
+  } else if (currentMillis - *lastClockTime > delay) {
+    *clockState = TRUE;
+  }
 }
 
-const char map[] = "ZXVTRPNLJHFDBACEGIKMOQSUWY";
+bool changeFlag(bool flag) {
+  if (flag == 0) flag = 1;
+  else flag = 0;
+  return flag;
+}
+
+void setTargets(int *target1, int *target2, char character) {
+  switch (character) {
+    case 'A':
+      *target1 = TARGET_POS_1;
+      *target2 = TARGET_POS_0;
+      break;
+    case 'B':
+      *target1 = TARGET_POS_6;
+      *target2 = TARGET_POS_0;
+      break;
+    case 'C':
+      *target1 = TARGET_POS_1;
+      *target2 = TARGET_POS_4;
+      break;
+    case 'D':
+      *target1 = TARGET_POS_1;
+      *target2 = TARGET_POS_3;
+      break;
+    case 'E':
+      *target1 = TARGET_POS_1;
+      *target2 = TARGET_POS_7;
+      break;
+    case 'F':
+      *target1 = TARGET_POS_6;
+      *target2 = TARGET_POS_4;
+      break;
+    case 'G':
+      *target1 = TARGET_POS_6;
+      *target2 = TARGET_POS_3;
+      break;
+    case 'H':
+      *target1 = TARGET_POS_6;
+      *target2 = TARGET_POS_7;
+      break;
+    case 'I':
+      *target1 = TARGET_POS_7;
+      *target2 = TARGET_POS_4;
+      break;
+    case 'J':
+      *target1 = TARGET_POS_7;
+      *target2 = TARGET_POS_3;
+      break;
+    case 'K':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_0;
+      break;
+    case 'L':
+      *target1 = TARGET_POS_2;
+      *target2 = TARGET_POS_0;
+      break;
+    case 'M':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_4;
+      break;
+    case 'N':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_3;
+      break;
+    case 'O':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_7;
+      break;
+    case 'P':
+      *target1 = TARGET_POS_2;
+      *target2 = TARGET_POS_4;
+      break;
+    case 'Q':
+      *target1 = TARGET_POS_2;
+      *target2 = TARGET_POS_3;
+      break;
+    case 'R':
+      *target1 = TARGET_POS_2;
+      *target2 = TARGET_POS_7;
+      break;
+    case 'S':
+      *target1 = TARGET_POS_3;
+      *target2 = TARGET_POS_4;
+      break;
+    case 'T':
+      *target1 = TARGET_POS_3;
+      *target2 = TARGET_POS_3;
+      break;
+    case 'U':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_1;
+      break;
+    case 'V':
+      *target1 = TARGET_POS_2;
+      *target2 = TARGET_POS_1;
+      break;
+    case 'W':
+      *target1 = TARGET_POS_7;
+      *target2 = TARGET_POS_2;
+      break;
+    case 'X':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_5;
+      break;
+    case 'Y':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_2;
+      break;
+    case 'Z':
+      *target1 = TARGET_POS_5;
+      *target2 = TARGET_POS_6;
+      break;
+  }
+}
+
+/* const char map[] = "ZXVTRPNLJHFDBACEGIKMOQSUWY";
 char myConvertKey(int buttonPin) {
 	char value = 0;
 	float reading = (analogRead(buttonPin) * V_REF) / ADC_RES;
@@ -569,169 +539,64 @@ char myConvertKey(int buttonPin) {
 
 	// *** Si può fare anche con convertKey2 sostituendo 0 a 500 e 4462 a 1000 (da verificare) ***
 }
+*/
 
 char convertKey(int buttonPin) {
-	char value = 0;
-	float reading = (analogRead(buttonPin) * V_REF) / ADC_RES;  // VOLT LETTI
-	float resistor = (reading * R_REF) / (V_REF - reading);
-	if (resistor < 500) value = 'Z';
-	else if (resistor < 1500) value = 'X';
-	else if (resistor < 2500) value = 'V';
-	else if (resistor < 3500) value = 'T';
-	else if (resistor < 4500) value = 'R';
-	else if (resistor < 5500) value = 'P';
-	else if (resistor < 6500) value = 'N';
-	else if (resistor < 7500) value = 'L';
-	else if (resistor < 8500) value = 'J';
-	else if (resistor < 9500) value = 'H';
-	else if (resistor < 10500) value = 'F';
-	else if (resistor < 11500) value = 'D';
-	else if (resistor < 12500) value = 'B';
-	else if (resistor < 13500) value = 'A';
-	else if (resistor < 14500) value = 'C';
-	else if (resistor < 15500) value = 'E';
-	else if (resistor < 16500) value = 'G';
-	else if (resistor < 17500) value = 'I';
-	else if (resistor < 18500) value = 'K';
-	else if (resistor < 19500) value = 'M';
-	else if (resistor < 20500) value = 'O';
-	else if (resistor < 21500) value = 'Q';
-	else if (resistor < 22500) value = 'S';
-	else if (resistor < 23500) value = 'U';
-	else if (resistor < 24500) value = 'W';
-	else if (resistor < 25500) value = 'Y';
-	return value;
+  char value = 0;
+  float reading = analogRead(buttonPin);
+  if (reading > 1000) {
+  } else if (reading > 987) value = 'Y';
+  else if (reading > 975) value = 'W';
+  else if (reading > 960) value = 'U';
+  else if (reading > 945) value = 'S';
+  else if (reading > 930) value = 'Q';
+  else if (reading > 915) value = 'O';
+  else if (reading > 900) value = 'M';
+  else if (reading > 865) value = 'K';
+  else if (reading > 830) value = 'I';
+  else if (reading > 800) value = 'G';
+  else if (reading > 765) value = 'E';
+  else if (reading > 730) value = 'C';
+  else if (reading > 700) value = 'A';
+  else if (reading > 650) value = 'B';
+  else if (reading > 600) value = 'D';
+  else if (reading > 550) value = 'F';
+  else if (reading > 500) value = 'H';
+  else if (reading > 450) value = 'J';
+  else if (reading > 400) value = 'L';
+  else if (reading > 350) value = 'N';
+  else if (reading > 300) value = 'P';
+  else if (reading > 250) value = 'R';
+  else if (reading > 200) value = 'T';
+  else if (reading > 150) value = 'V';
+  else if (reading > 100) value = 'X';
+  else if (reading > 0) value = 'Z';
+  return value;
 }
 
-char convertKey2(int buttonPin) {
-	char value = 0;
-	int reading = analogRead(buttonPin);
-	float resistor = ((R_REF * reading) / (ADC_RES - reading));
-	if (resistor < 4461) value = 'Z';
-	else if (resistor < 8923) value = 'X';
-	else if (resistor < 13385) value = 'V';
-	else if (resistor < 17845) value = 'T';
-	else if (resistor < 22310) value = 'R';
-	else if (resistor < 26770) value = 'P';
-	else if (resistor < 31230) value = 'N';
-	else if (resistor < 35690) value = 'L';
-	else if (resistor < 40155) value = 'J';
-	else if (resistor < 44615) value = 'H';
-	else if (resistor < 49080) value = 'F';
-	else if (resistor < 53540) value = 'D';
-	else if (resistor < 58000) value = 'B';
-	else if (resistor < 62460) value = 'A';
-	else if (resistor < 66920) value = 'C';
-	else if (resistor < 71385) value = 'E';
-	else if (resistor < 75850) value = 'G';
-	else if (resistor < 80310) value = 'I';
-	else if (resistor < 84770) value = 'K';
-	else if (resistor < 89230) value = 'M';
-	else if (resistor < 93690) value = 'O';
-	else if (resistor < 98150) value = 'Q';
-	else if (resistor < 102615) value = 'S';
-	else if (resistor < 107080) value = 'U';
-	else if (resistor < 111540) value = 'W';
-	else if (resistor < 116000) value = 'Y';
-	return value;
+void debounceButton(int *filteredButtonState, int inputPin, unsigned long *lastButtonTime, int delay) {
+  unsigned long currentMillis = millis();
+  int reading = digitalRead(inputPin);
+
+  if (*filteredButtonState != reading) {
+    *lastButtonTime = currentMillis;
+  }
+  if (currentMillis - *lastButtonTime > delay) {
+    if (*filteredButtonState != reading) {
+      *filteredButtonState = reading;
+    }
+  }
 }
 
-/* 
- * Soluzione proposta da bob:
- * 	
- * Quando il programma nota una differenza tra reading e buttonState, se updateButtonState è FALSE, lo setta a TRUE e fa partire il timer.
- * Se il programma richiama questa funzione che updateButtonState è TRUE ma non è passato abbastanza tempo, esce senza eseguire l'update.
- * Se il programma richiama questa funzione che updateButtonState è TRUE ed è passato abbastanza tempo, esegue l'update e setta a FALSE updateButtonState.
- */
-bool updateButtonState = FALSE;
-unsigned long lastButtonTime;
+void debounceKey(char *filteredKeyState, char keyState, unsigned long *lastButtonTime, int delay) {
+  unsigned long currentMillis = millis();
 
-int debounceKey(char buttonPin, int buttonState) {
-
-	int reading = digitalRead(buttonPin);
-	unsigned long currentMillis = millis();
-
-	if (reading != buttonState) {
-		if (updateButtonState){
-			if (currentMillis - lastButtonTime >= BTN_DEBOUNCE_DELAY) {
-				buttonState = reading;
-				updateButtonState = FALSE;
-			}
-		}
-		else {
-			lastButtonTime = currentMillis; 
-			updateButtonState = TRUE;
-		}
-	}
-
-	return buttonState;
-
+  if (*filteredKeyState != keyState) {
+    *lastButtonTime = currentMillis;
+  }
+  if (currentMillis - *lastButtonTime > delay) {
+    if (*filteredKeyState != keyState) {
+      *filteredKeyState = keyState;
+    }
+  }
 }
-
-void debounceKey(char buttonPin, int* buttonState, unsigned long* lastButtonTime) {
-	unsigned long currentMillis = millis();
-
-	if (currentMillis - *lastButtonTime > BTN_DEBOUNCE_DELAY) {
-		int reading = digitalRead(buttonPin);
-		
-		if (reading != *buttonState) {
-			*lastButtonTime = currentMillis;
-		}
-
-		// inutile: la condizione di questo else è !(reading != *buttonState), quindi reading == buttonState 
-		/* 
-		 * else {
-		 * 	*buttonState = reading;
-		 * }
-		 */
-	}
-}
-
-
-/*
-
-  typedef struct {
-	int value; 	// Ohm value
-	char lcd; 	// LCD character
-	int leftPos; 	// Left motor position
-	int rightPos; 	// Right motor position
-  } braille_char;
-
-  braille_char braille_char_factory(int value, char lcd, int leftPos, int rightPos);
-
-  braille_char braille_char_factory(int value, char lcd, int leftPos, int rightPos) {
-	braille_char c;
-	c.value = value;
-	c.lcd = lcd;
-	c.leftPos = leftPos;
-	c.rightPos = rightPos;
-  } braille_char;
-
-  // *** Da completare con i valori e da inserire in SETUP ***
-  braille_char char_a = braille_char_factory(182, 'A', pos_100, pos_000);
-  braille_char char_b = braille_char_factory(482, 'B', pos_110, pos_000);
-  braille_char char_c = braille_char_factory(982, 'C', pos_100, pos_100);
-  braille_char char_d = braille_char_factory(1023, 'D', pos_100, pos_110);
-  braille_char char_e = braille_char_factory(*, 'E', pos_100, pos_010);
-  braille_char char_f = braille_char_factory(*, 'F', pos_110, pos_100);
-  braille_char char_g = braille_char_factory(*, 'G', pos_110, pos_110);
-  braille_char char_h = braille_char_factory(*, 'H', pos_110, pos_010);
-  braille_char char_i = braille_char_factory(*, 'I', pos_010, pos_100);
-  braille_char char_j = braille_char_factory(*, 'J', pos_010, pos_110);
-  braille_char char_k = braille_char_factory(*, 'K', pos_101, pos_000);
-  braille_char char_l = braille_char_factory(*, 'L', pos_111, pos_000);
-  braille_char char_m = braille_char_factory(*, 'M', pos_101, pos_100);
-  braille_char char_n = braille_char_factory(*, 'N', pos_101, pos_110);
-  braille_char char_o = braille_char_factory(*, 'O', pos_101, pos_010);
-  braille_char char_p = braille_char_factory(*, 'P', pos_111, pos_100);
-  braille_char char_q = braille_char_factory(*, 'Q', pos_111, pos_110);
-  braille_char char_r = braille_char_factory(*, 'R', pos_111, pos_010);
-  braille_char char_s = braille_char_factory(*, 'S', pos_011, pos_100);
-  braille_char char_t = braille_char_factory(*, 'T', pos_011, pos_100);
-  braille_char char_u = braille_char_factory(*, 'U', pos_101, pos_001);
-  braille_char char_v = braille_char_factory(*, 'V', pos_111, pos_001);
-  braille_char char_w = braille_char_factory(*, 'W', pos_010, pos_111);
-  braille_char char_x = braille_char_factory(*, 'X', pos_101, pos_101);
-  braille_char char_y = braille_char_factory(*, 'Y', pos_101, pos_111);
-  braille_char char_z = braille_char_factory(*, 'Z', pos_101, pos_011);
-*/ 
