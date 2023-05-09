@@ -130,6 +130,9 @@ int keyBufferLength = 0;
 MainState mainState = START_HOME;
 UpdateState updateState = SET_TARGETS;
 
+bool updateFlag = FALSE;
+long stepper1CurrentPosition = 0;
+long stepper2CurrentPosition = 0;
 // LCD and motors
 LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 AccelStepper stepper1(AccelStepper::HALF4WIRE, STEPPER1_PIN1, STEPPER1_PIN3, STEPPER1_PIN2, STEPPER1_PIN4);
@@ -280,9 +283,11 @@ void loop() {
       /* CODICE CALCOLO NUOVO VALORE ATTUALE POSIZIONE MOTORI */
       if (initHome1SyncFlag == finHome1SyncFlag) {
         stepper1.setCurrentPosition((((finHome1Pos + initHome1Pos) / 2) % STEP_PER_ROTATION) + target1Pos);
+        Serial.print("Stepper 1 Position Updated \n");
       }
       if (initHome2SyncFlag == finHome2SyncFlag) {
         stepper2.setCurrentPosition((((finHome2Pos + initHome2Pos) / 2) % STEP_PER_ROTATION) + target1Pos);
+        Serial.print("Stepper 2 Position Updated \n");
       }
       mainState = READY;
       break;
@@ -299,41 +304,31 @@ void loop() {
 
     // START of UPDATE_CELL STATE-MACHINE
     case UPDATE_CELL:
-      switch (updateState) {
-        case SET_TARGETS:
-          int stepper1CurrentPosition = stepper1.currentPosition() % STEP_PER_ROTATION;
-          int stepper2CurrentPosition = stepper2.currentPosition() % STEP_PER_ROTATION;
-          //bool flag = FALSE;
-          if (target1Pos < stepper1CurrentPosition) {
-            stepper1.move(STEP_PER_ROTATION - (stepper1CurrentPosition - target1Pos));
-          } else {
-            stepper1.move(target1Pos - (stepper1CurrentPosition));
-          }
-
-          if (target2Pos < stepper2CurrentPosition) {
-            stepper2.move(STEP_PER_ROTATION - (stepper2CurrentPosition - target2Pos));
-          } else {
-            stepper2.move(target2Pos - stepper2CurrentPosition);
-          }
-          /*
-          if (flag) {
-            updateState = CHECK_IF_DONE;
-            flag = FALSE;
-          }
-          else flag = TRUE;
-          */
-          break;
-
-        case CHECK_IF_DONE:
-          if ((stepper1.distanceToGo() == 0) && ((stepper2.distanceToGo() == 0))) {
-          Serial.print("CAZZOOOOO");
-          updateState = SET_TARGETS;
+      if (updateFlag) {
+        if ((stepper1.distanceToGo() == 0) && ((stepper2.distanceToGo() == 0))) {
+          updateFlag = FALSE;
           mainState = UPDATE_COMPLETE;
-          }
-          break;
+        }
       }
-      break;
-      // END of UPDATE_CELL STATE-MACHINE
+      else {
+        stepper1CurrentPosition = stepper1.currentPosition() % STEP_PER_ROTATION;
+        stepper2CurrentPosition = stepper2.currentPosition() % STEP_PER_ROTATION;
+        if (target1Pos < stepper1CurrentPosition) {
+          stepper1.move(STEP_PER_ROTATION - (stepper1CurrentPosition - target1Pos));
+        } 
+        else {
+          stepper1.move(target1Pos - (stepper1CurrentPosition));
+        }
+
+        if (target2Pos < stepper2CurrentPosition) {
+          stepper2.move(STEP_PER_ROTATION - (stepper2CurrentPosition - target2Pos));
+        } 
+        else {
+          stepper2.move(target2Pos - stepper2CurrentPosition);
+        }
+        updateFlag = TRUE;
+      }
+    break;
     case UPDATE_COMPLETE:  // SHIFT BUFFER, REMOVE-1 from keyBufferLength, write the last one to null.
       for (int i = 0; i < BUFFER_SIZE - 1; i++) {
         keyBuffer[i] = keyBuffer[i + 1];
@@ -352,7 +347,7 @@ void loop() {
   if (printClock) {
     lcd.setCursor(8, 0);  // First Line update
     lcd.print(keyBuffer);
-    lcd.setCursor(7, 1);  // Second Line update
+    lcd.setCursor(6, 1);  // Second Line update
     switch (mainState) {
       case START_HOME:
         lcd.print("START_HOME");
@@ -376,11 +371,6 @@ void loop() {
   }
 // DEBUGGING
 #ifdef DEBUG
-  if ((button1State == LOW) && (lastButton1State == HIGH)) {
-    mainState = UPDATE_COMPLETE;
-    updateState = SET_TARGETS;
-    Serial.print("CAZZOOOOO");
-  }
   if (printClock) {
     Serial.print(keyValue);
     Serial.print("..");
